@@ -78,19 +78,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(snap.data() as UserProfile)
     }
   }
+useEffect(() => {
+  console.log('AuthProvider mounted')
 
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
+  const timeout = setTimeout(() => {
+    console.error('Firebase auth timeout')
+    setLoading(false)
+  }, 10000)
+
+  const unsub = onAuthStateChanged(
+    auth,
+    async (u) => {
+      console.log('Auth state changed:', u?.uid)
+
+      clearTimeout(timeout)
+
       setUser(u)
-      if (u) {
-        await loadProfile(u.uid)
-      } else {
-        setProfile(null)
+
+      try {
+        if (u) {
+          await loadProfile(u.uid)
+        } else {
+          setProfile(null)
+        }
+      } catch (err) {
+        console.error('Profile load error:', err)
       }
+
       setLoading(false)
-    })
-    return unsub
-  }, [])
+    },
+    (error) => {
+      console.error('Firebase auth error:', error)
+      clearTimeout(timeout)
+      setLoading(false)
+    }
+  )
+
+  return () => {
+    clearTimeout(timeout)
+    unsub()
+  }
+}, [])
 
   async function signIn(email: string, password: string) {
     const cred = await signInWithEmailAndPassword(auth, email, password)
