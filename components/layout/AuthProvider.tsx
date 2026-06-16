@@ -33,29 +33,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
 
-async function loadProfile(uid: string) {
-  try {
-    console.log('Loading profile for', uid)
+  async function loadProfile(uid: string) {
+    try {
+      console.log('Loading profile:', uid)
 
-    const ref = doc(db, 'users', uid)
-    const snap = await getDoc(ref)
+      const ref = doc(db, 'users', uid)
+      const snap = await getDoc(ref)
 
-    console.log('Firestore response received')
+      console.log('Profile exists:', snap.exists())
 
-    if (snap.exists()) {
-      console.log('Profile exists')
-      setProfile(snap.data() as UserProfile)
-    } else {
-      console.log('Profile does not exist')
+      if (snap.exists()) {
+        setProfile(snap.data() as UserProfile)
+      }
+    } catch (error) {
+      console.error('Firestore error:', error)
     }
-  } catch (error) {
-    console.error('Firestore failed:', error)
   }
-}
 
   async function createProfile(user: User) {
     const ref = doc(db, 'users', user.uid)
     const snap = await getDoc(ref)
+
     if (!snap.exists()) {
       const newProfile: UserProfile = {
         uid: user.uid,
@@ -84,55 +82,58 @@ async function loadProfile(uid: string) {
           achievementsUnlocked: 0,
         },
       }
-      await setDoc(ref, { ...newProfile, createdAt: serverTimestamp() })
+
+      await setDoc(ref, {
+        ...newProfile,
+        createdAt: serverTimestamp(),
+      })
+
       setProfile(newProfile)
     } else {
       setProfile(snap.data() as UserProfile)
     }
   }
-useEffect(() => {
-  console.log('AuthProvider mounted')
 
-  const timeout = setTimeout(() => {
-    console.error('Firebase auth timeout')
-    setLoading(false)
-  }, 10000)
+  useEffect(() => {
+    console.log('AuthProvider mounted')
 
-  const unsub = onAuthStateChanged(
-    auth,
-    async (u) => {
-      console.log('Auth state changed:', u?.uid)
-
-      clearTimeout(timeout)
-
-      setUser(u)
-
-      try {
-        if (u) {
-  console.log('User logged in:', u.uid)
-
-  loadProfile(u.uid)
-    .then(() => console.log('Profile loaded'))
-    .catch((err) => console.error('Profile error:', err))
-} else {
-  console.log('No user')
-  setProfile(null)
-}
-
-setLoading(false)
-    },
-    (error) => {
-      console.error('Firebase auth error:', error)
-      clearTimeout(timeout)
+    const timeout = setTimeout(() => {
+      console.error('Firebase auth timeout')
       setLoading(false)
-    }
-  )
+    }, 10000)
 
-  return () => {
-    clearTimeout(timeout)
-    unsub()
-  }
-}, [])
+    const unsub = onAuthStateChanged(
+      auth,
+      async (u) => {
+        console.log('Auth state changed:', u?.uid)
+
+        setUser(u)
+
+        try {
+          if (u) {
+            await loadProfile(u.uid)
+          } else {
+            setProfile(null)
+          }
+        } catch (err) {
+          console.error('Profile load error:', err)
+        }
+
+        clearTimeout(timeout)
+        setLoading(false)
+      },
+      (error) => {
+        console.error('Firebase auth error:', error)
+        clearTimeout(timeout)
+        setLoading(false)
+      }
+    )
+
+    return () => {
+      clearTimeout(timeout)
+      unsub()
+    }
+  }, [])
 
   async function signIn(email: string, password: string) {
     const cred = await signInWithEmailAndPassword(auth, email, password)
@@ -141,7 +142,11 @@ setLoading(false)
 
   async function signUp(email: string, password: string, name: string) {
     const cred = await createUserWithEmailAndPassword(auth, email, password)
-    await updateProfile(cred.user, { displayName: name })
+
+    await updateProfile(cred.user, {
+      displayName: name,
+    })
+
     await createProfile(cred.user)
   }
 
@@ -157,11 +162,24 @@ setLoading(false)
   }
 
   async function refreshProfile() {
-    if (user) await loadProfile(user.uid)
+    if (user) {
+      await loadProfile(user.uid)
+    }
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signInGoogle, logout, refreshProfile }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        loading,
+        signIn,
+        signUp,
+        signInGoogle,
+        logout,
+        refreshProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )
@@ -169,6 +187,10 @@ setLoading(false)
 
 export function useAuth() {
   const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
+
+  if (!ctx) {
+    throw new Error('useAuth must be used within AuthProvider')
+  }
+
   return ctx
 }
