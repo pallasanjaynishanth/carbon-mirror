@@ -33,13 +33,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
 
-  async function loadProfile(uid: string) {
+async function loadProfile(uid: string) {
+  try {
+    console.log('Loading profile for', uid)
+
     const ref = doc(db, 'users', uid)
     const snap = await getDoc(ref)
+
+    console.log('Firestore response received')
+
     if (snap.exists()) {
+      console.log('Profile exists')
       setProfile(snap.data() as UserProfile)
+    } else {
+      console.log('Profile does not exist')
     }
+  } catch (error) {
+    console.error('Firestore failed:', error)
   }
+}
 
   async function createProfile(user: User) {
     const ref = doc(db, 'users', user.uid)
@@ -97,15 +109,17 @@ useEffect(() => {
 
       try {
         if (u) {
-          await loadProfile(u.uid)
-        } else {
-          setProfile(null)
-        }
-      } catch (err) {
-        console.error('Profile load error:', err)
-      }
+  console.log('User logged in:', u.uid)
 
-      setLoading(false)
+  loadProfile(u.uid)
+    .then(() => console.log('Profile loaded'))
+    .catch((err) => console.error('Profile error:', err))
+} else {
+  console.log('No user')
+  setProfile(null)
+}
+
+setLoading(false)
     },
     (error) => {
       console.error('Firebase auth error:', error)
